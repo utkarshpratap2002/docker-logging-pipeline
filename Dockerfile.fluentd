@@ -1,0 +1,12 @@
+FROM arm64v8/fluentd:v1.16-debian-1
+
+USER root
+
+RUN fluent-gem install elasticsearch -v "~> 8.0" --no-doc && \
+    # NOW, install the fluentd plugin. It will see that the dependency is already
+    # met and will not try to install the v9 client.
+    fluent-gem install fluent-plugin-elasticsearch -v 5.3.0 --no-doc
+
+COPY ./fluentd.conf /fluentd/etc/fluent.conf
+
+USER fluent

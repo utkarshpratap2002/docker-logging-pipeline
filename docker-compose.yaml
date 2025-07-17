@@ -1,0 +1,84 @@
+version: '3.7'
+
+services: 
+  sample-app: 
+    image: alpine
+    container_name: sample-app
+    volumes:
+      - ./:/app
+    working_dir: /app
+    # FIX #3: Ensure that it get shutdown when docker sends signal
+    command: ./run.sh
+    # FIX #1: Ensure the service starts only after the fluentd
+    depends_on:
+      fluentd:
+        condition: service_started
+    logging:
+      driver: "fluentd"
+      options:
+        # FIX #2: Communication with Docker DNS
+        fluentd-address: host.docker.internal:24224
+        tag: docker.app.sample
+    networks:
+      - logging-net
+
+  fluentd:
+    build:
+      context: .
+      dockerfile: Dockerfile.fluentd
+    container_name: fluentd
+    # FIX #1: use a variable for the path to make it explicit
+    # volumes:
+    #   - ./fluentd.conf:/fleuntd/etc/custom.conf
+    # command: fluentd -c /fluentd/etc/custom.conf -p /fluentd/plugins
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    networks:
+      - logging-net
+    # FIX @2
+    depends_on:
+      es01:
+        condition: service_healthy
+
+  es01:
+    image: arm64v8/elasticsearch:8.17.8
+    container_name: es01
+    environment:
+      - node.name=es01
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "xpack.security.enabled=false"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - logging-net
+    # FIX @3: Define what healthy means
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  kibana:
+    image: arm64v8/kibana:8.17.8
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: 'http://es01:9200'
+    networks:
+      - logging-net
+    depends_on:
+      - es01
+    
+volumes:
+  es-data:
+
+networks:
+  logging-net:
+    driver: bridge
