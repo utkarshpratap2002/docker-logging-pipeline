@@ -1,27 +1,6 @@
 version: '3.7'
 
 services: 
-  sample-app: 
-    image: alpine
-    container_name: sample-app
-    volumes:
-      - ./:/app
-    working_dir: /app
-    # FIX #3: Ensure that it get shutdown when docker sends signal
-    command: ./run.sh
-    # FIX #1: Ensure the service starts only after the fluentd
-    depends_on:
-      fluentd:
-        condition: service_started
-    logging:
-      driver: "fluentd"
-      options:
-        # FIX #2: Communication with Docker DNS
-        fluentd-address: host.docker.internal:24224
-        tag: docker.app.sample
-    networks:
-      - logging-net
-
   fluentd:
     build:
       context: .
@@ -42,7 +21,7 @@ services:
         condition: service_healthy
 
   es01:
-    image: arm64v8/elasticsearch:8.17.8
+    image: elasticsearch:8.17.8
     container_name: es01
     environment:
       - node.name=es01
@@ -65,7 +44,7 @@ services:
       retries: 12
 
   kibana:
-    image: arm64v8/kibana:8.17.8
+    image: kibana:8.17.8
     container_name: kibana
     ports:
       - "5601:5601"
@@ -74,7 +53,8 @@ services:
     networks:
       - logging-net
     depends_on:
-      - es01
+      es01:
+        condition: service_healthy
     
 volumes:
   es-data:
